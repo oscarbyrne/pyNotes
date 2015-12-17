@@ -1,5 +1,7 @@
 # Usage
-
+    
+    python -i constants.py
+    
     >>> Gs_minor.triads
     [GsMin, AsDim, BMaj, CsMin, DsMin, EMaj, FsMaj]
     >>> GsMin + m7
