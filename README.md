@@ -1,4 +1,6 @@
-# Usage
+Using python to explore the music theory of intervals and chords
+
+#### Usage
     
     python -i constants.py
     
