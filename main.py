@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, MutableSet
 from itertools import combinations, starmap
 
 from describe import describe_object, set_verbosity
@@ -58,22 +58,34 @@ class IC(object):
         return "IC({})".format(int(self))
 
 
-class Cluster(object):
+class Cluster(MutableSet):
 
     def __init__(self, ps):
         self.pitch_set = set()
         for p in ps:
             self.add(p)
+
+    @property
+    def interval_vector(self):
+        pairs = combinations(self, 2)
+        return Counter(starmap(IC, pairs))
         
     def add(self, p):
         p = PC(p)
         self.pitch_set.add(p)
         return self
 
-    @property
-    def interval_vector(self):
-        pairs = combinations(self, 2)
-        return Counter(starmap(IC, pairs))
+    def discard(self, p):
+        p = PC(p)
+        self.pitch_set.discard(p)
+        return self
+
+    def __contains__(self, p):
+        p = PC(p)
+        return p in self.pitch_set
+
+    def __len__(self):
+        return len(self.pitch_set)
 
     def __iter__(self):
         notes = list(self.pitch_set)
@@ -90,4 +102,7 @@ class Cluster(object):
         return "Cluster([{}])".format(
             ", ".join(repr(p) for p in self)
         )
+
+
+
 
