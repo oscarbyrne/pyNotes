@@ -1,14 +1,14 @@
-from collections import Sequence, namedtuple
-from itertools import islice, combinations
+from collections import Sequence
+from itertools import combinations, chain
 
 
 class Cycle(Sequence):
 
-    def __init__(self, iterable):
-        self.items = list(iterable)
+    def __init__(self, sequence):
+        self.items = list(sequence)
 
     def rotate(self, i):
-        return type(self)(self.items[i:] + self.items[:i])
+        return Cycle(self.items[i:] + self.items[:i])
 
     def __len__(self):
         return len(self.items)
@@ -23,29 +23,59 @@ class Cycle(Sequence):
         return "Cycle({})".format(repr(self.items))
 
 
-class Pitch(object):
+class PC(object):
+
+    names = (
+        "C",
+        "C#",
+        "D",
+        "D#",
+        "E",
+        "F",
+        "F#",
+        "G",
+        "G#",
+        "A",
+        "A#",
+        "B"
+    )
 
     def __init__(self, p):
-        self.p = p
+        self.p = int(p)
 
     @property
-    def pitch_class(self):
-        return self.p%12
+    def name(self):
+        return PC.names[int(self)]
 
-    def __add__(self, p):
-        return Pitch(self.p + p)
+    def __int__(self):
+        return self.p % 12
 
-    def __sub__(self, p):
-        return Pitch(self.p - p)
+    def __sub__(self, other):
+        return IC(self, other)
 
-    def __rshift__(self, other):
-        return Interval(other.p - self.p)
+    def __add__(self, other):
+        try:
+            return Cluster(other) + self
+        except TypeError:
+            return Cluster([other, self])
+
+    def __cmp__(self, other):
+        return cmp(int(self), int(other))
+
+    def __hash__(self):
+        return hash(int(self))
 
     def __str__(self):
-        return str(self.pitch_class)
+        return "Pitch {} ({})".format(
+            int(self),
+            self.name
+        )
+
+    def __repr__(self):
+        return "PC({})".format(int(self))
 
 
-class Interval(object):
+class IC(object):
 
     names = (
         "unison",
@@ -57,125 +87,105 @@ class Interval(object):
         "tritone"
     )
 
-    def __init__(self, pitch_interval):
-        self.ip = abs(pitch_interval)
+    def __init__(self, a, b=0):
+        self.a = int(a)
+        self.b = int(b)
 
     @property
-    def interval_class(self):
-        ip1 =  abs(0 - self.ip%12)
-        ip2 = abs(12 - self.ip%12)
-        return min(ip1, ip2)
+    def name(self):
+        return IC.names[int(self)]
+
+    def __int__(self):
+        ab = (self.a - self.b) % 12
+        ba = (self.b - self.a) % 12
+        return min(ab, ba)
 
     def __str__(self):
-        return type(self).names[self.interval_class]
+        return "Interval {} ({})".format(
+            int(self),
+            self.name
+        )
+
+    def __repr__(self):
+        return "IC({})".format(int(self))
 
 
-class IntervalVector(object):
+class Vector(object):
 
     def __init__(self, pitch_set):
-        self.counter = [0] * 7
-        pairs = combinations(pitch_set, 2)
-        for a,b in pairs:
-            i = (a >> b).interval_class
-            self.counter[i] += 1
+        self.pitch_set = pitch_set
+
+    @property
+    def pairs(self):
+        return combinations(self.pitch_set, 2)
+
+    @property
+    def count(self):
+        counter = [0] * 7
+        for a, b in self.pairs:
+            i = IC(a, b)
+            counter[int(i)] += 1
+        return counter
 
     def __str__(self):
-        return "< {1} {2} {3} {4} {5} {6} >".format(*self.counter)
-
-
-class DiatonicScale(object):
-
-    Definition = namedtuple(
-        "ScaleDefinition",
-        ['tonic', 'gen', 'rot']
-    )
-
-    generators = (
-        (2, 2, 1, 2, 2, 2, 1),
-        (2, 1, 2, 2, 2, 2, 1)
-    )
-
-    names = (
-        (
-            "ionian",
-            "dorian",
-            "phrygian",
-            "lydian",
-            "mixolydian",
-            "aeolian",
-            "locrian"
-        ),
-        (
-            "jazz minor",
-            "phrygian #6",
-            "lydian augmented",
-            "overtone scale",
-            "mixolydian b6",
-            "locrian #2",
-            "altered scale"
+        def format_interval(i):
+            return "{}  * {}".format(
+                self.count[i],
+                IC.names[i]
+            )
+        return (
+            "                  \n" +
+            "Interval vector   \n" +
+            "----------------- \n" +
+            "{}                \n" +
+            "                  \n" +
+            "Pitch Classes:    \n" +
+            "                  \n" +
+            "  {}              \n" +
+            "                  \n" +
+            "Interval Classes: \n" +
+            "                  \n" +
+            "  {}              \n" * 6
+        ).format(
+            repr(self),
+            "\n  ".join(str(p) for p in self.pitch_set),
+            *(format_interval(i) for i in range(1, 7))
         )
-    )
 
-    def __init__(self, tonic, generator, rotation):
-        self.define = type(self).Definition(tonic, generator, rotation)
+    def __repr__(self):
+        return "< {1} {2} {3} {4} {5} {6} >".format(*self.count)
 
-    def relative_mode(self, d):
-        tonic, gen, rot = self.define
-        return type(self)(self.note(d), gen, rot + d)
 
-    @property
-    def tonic(self):
-        return Pitch(self.define.tonic)
+class Cluster(object):
 
-    @property
-    def mode(self):
-        return Cycle(type(self).names[self.define.gen])[self.define.rot]
-
-    @property
-    def generator(self):
-        return Cycle(type(self).generators[self.define.gen])
-
-    @property
-    def steps(self):
-        return self.generator.rotate(self.define.rot)
-
-    def note(self, d):
-        assert d > 0
-        return self.tonic + sum(self.generator[:d-1])
-
-    @property
-    def degrees(self):
-        return xrange(1, 8)
-
-    @property
-    def pitch_set(self):
-        return [self.note(d) for d in self.degrees]
-
-    def interval(self, d2, d1=1):
-        return self.note(d1) >> self.note(d2)
-
-    @property
-    def intervals(self):
-        return [self.interval(d) for d in self.degrees]
+    def __init__(self, ps):
+        self.pitch_set = set()
+        for p in ps:
+            self.add(p)
 
     @property
     def interval_vector(self):
-        return IntervalVector(self.pitch_set)
+        return Vector(self)
+        
+    def add(self, p):
+        p = PC(p)
+        self.pitch_set.add(p)
+        return self
 
-    def __getitem__(self, d):
-        assert d > 0
-        return Chord.triad(self, d)
+    def __iter__(self):
+        notes = list(self.pitch_set)
+        return iter(sorted(notes))
+
+    def __add__(self, p):
+        new = Cluster(self)
+        return new.add(p)
 
     def __str__(self):
-        return (
-            "                             \n"
-            "    Scale:       {} {}       \n"
-            "    ------                   \n"
-            "    Pitches:     {}          \n"
-            "    Intervals:   {}          \n"
-        ).format(
-            self.tonic,
-            self.mode,
-            [str(n) for n in self.pitch_set],
-            self.interval_vector
+        return str(self.interval_vector)
+
+    def __repr__(self):
+        return "Cluster([{}])".format(
+            ", ".join(repr(p) for p in self)
         )
+
+
