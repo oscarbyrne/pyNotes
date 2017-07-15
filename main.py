@@ -1,137 +1,181 @@
-import sys
+from collections import Sequence, namedtuple
+from itertools import islice, combinations
 
 
-class MCycle(list):
+class Cycle(Sequence):
 
-    def d_to_i(self, d):
-        assert 1 <= d
-        return (d - 1) % len(self)
+    def __init__(self, iterable):
+        self.items = list(iterable)
 
-    def from_degree(self, d):
-        assert 1 <= d <= len(self)
-        i = self.d_to_i(d)
-        return type(self)(self[i:] + self[:i])
+    def rotate(self, i):
+        return type(self)(self.items[i:] + self.items[:i])
 
-    def __getitem__(self, d):
-        if isinstance(d, slice):
-            raise SyntaxError("Don't support stepped slice for MCycle")
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            return islice(self, i.start, i.stop, i.step)
         else:
-            i = self.d_to_i(d)
-            return list.__getitem__(self, i)
+            return self.items[i % len(self)]
 
-    def __getslice__(self, start, stop):
-        if stop == sys.maxint:
-            stop = len(self)
-        return [self[i+1] for i in range(start, stop)]
+    def __repr__(self):
+        return "Cycle({})".format(repr(self.items))
 
+
+class Pitch(object):
+
+    def __init__(self, p):
+        self.p = p
+
+    @property
+    def pitch_class(self):
+        return self.p%12
+
+    def __add__(self, p):
+        return Pitch(self.p + p)
+
+    def __sub__(self, p):
+        return Pitch(self.p - p)
+
+    def __rshift__(self, other):
+        return Interval(other.p - self.p)
+
+    def __str__(self):
+        return str(self.pitch_class)
+
+
+class Interval(object):
+
+    names = (
+        "unison",
+        "m2 / M7",
+        "M2 / m7",
+        "m3 / M6",
+        "M3 / m6",
+        "P4 / P5",
+        "tritone"
+    )
+
+    def __init__(self, pitch_interval):
+        self.ip = abs(pitch_interval)
+
+    @property
+    def interval_class(self):
+        ip1 =  abs(0 - self.ip%12)
+        ip2 = abs(12 - self.ip%12)
+        return min(ip1, ip2)
+
+    def __str__(self):
+        return type(self).names[self.interval_class]
+
+
+class IntervalVector(object):
+
+    def __init__(self, pitch_set):
+        self.counter = [0] * 7
+        pairs = combinations(pitch_set, 2)
+        for a,b in pairs:
+            i = (a >> b).interval_class
+            self.counter[i] += 1
+
+    def __str__(self):
+        return "< {1} {2} {3} {4} {5} {6} >".format(*self.counter)
 
 
 class DiatonicScale(object):
+
+    Definition = namedtuple(
+        "ScaleDefinition",
+        ['tonic', 'gen', 'rot']
+    )
 
     generators = (
         (2, 2, 1, 2, 2, 2, 1),
         (2, 1, 2, 2, 2, 2, 1)
     )
 
-    modes = {
-        "ionian"            : (0, 1),
-        "dorian"            : (0, 2),
-        "phrygian"          : (0, 3),
-        "lydian"            : (0, 4),
-        "mixolydian"        : (0, 5),
-        "aeolian"           : (0, 6),
-        "locrian"           : (0, 7),
-        "jazz minor"        : (1, 1),
-        "phrygian #6"       : (1, 2),
-        "lydian augmented"  : (1, 3),
-        "overtone scale"    : (1, 4),
-        "mixolydian b6"     : (1, 5),
-        "locrian #2"        : (1, 6),
-        "altered scale"     : (1, 7)
-    }
+    names = (
+        (
+            "ionian",
+            "dorian",
+            "phrygian",
+            "lydian",
+            "mixolydian",
+            "aeolian",
+            "locrian"
+        ),
+        (
+            "jazz minor",
+            "phrygian #6",
+            "lydian augmented",
+            "overtone scale",
+            "mixolydian b6",
+            "locrian #2",
+            "altered scale"
+        )
+    )
 
-    @classmethod
-    def from_name(cls, tonic, name):
-        return cls.from_define(tonic, *cls.modes[name])
+    def __init__(self, tonic, generator, rotation):
+        self.define = type(self).Definition(tonic, generator, rotation)
 
-    @classmethod
-    def from_define(cls, tonic, gen, mode):
-        return cls(tonic, cls.generators[gen], mode)
+    def relative_mode(self, d):
+        tonic, gen, rot = self.define
+        return type(self)(self.note(d), gen, rot + d)
 
-    def __init__(self, tonic, steps, mode=1):
-        self.tonic = tonic
-        self.steps = MCycle(steps).from_degree(mode)
+    @property
+    def tonic(self):
+        return Pitch(self.define.tonic)
 
-    def parallel_mode(self, *define):
-        if isinstance(define[0], basestring):
-            return type(self).from_name(self.tonic, define[0])
-        else:
-            return type(self).from_define(self.tonic, *define)
-        
-    def relative_mode(self, degree):
-        return type(self)(self.note(degree), self.steps)
+    @property
+    def mode(self):
+        return Cycle(type(self).names[self.define.gen])[self.define.rot]
 
-    def degrees(self):
-        return xrange(1, len(self.steps) + 1)
+    @property
+    def generator(self):
+        return Cycle(type(self).generators[self.define.gen])
 
-    def interval(self, d2, d1=1):
-        assert 1 <= d1
-        assert 1 <= d2
-        d1, d2 = sorted([d1-1, d2-1])
-        return sum(self.steps[d1:d2])
-
-    def intervals(self):
-        return [self.interval(d) for d in self.degrees()]
+    @property
+    def steps(self):
+        return self.generator.rotate(self.define.rot)
 
     def note(self, d):
-        assert 1 <= d
-        return self.tonic + self.interval(d)
+        assert d > 0
+        return self.tonic + sum(self.generator[:d-1])
 
-    def notes(self):
-        return [self.note(d) for d in self.degrees()]
+    @property
+    def degrees(self):
+        return xrange(1, 8)
 
-    def triad(self, d):
-        assert 1 <= d
-        return Chord.triad(self, d)
+    @property
+    def pitch_set(self):
+        return [self.note(d) for d in self.degrees]
+
+    def interval(self, d2, d1=1):
+        return self.note(d1) >> self.note(d2)
+
+    @property
+    def intervals(self):
+        return [self.interval(d) for d in self.degrees]
+
+    @property
+    def interval_vector(self):
+        return IntervalVector(self.pitch_set)
 
     def __getitem__(self, d):
-        return self.triad(d)
+        assert d > 0
+        return Chord.triad(self, d)
 
-
-
-class Chord(object):
-
-    @classmethod
-    def triad(cls, scale, degree):
-        assert 1 <= degree <= 7
-        return cls(scale.relative_mode(degree), [1, 3, 5])
-
-    def __init__(self, scale, degrees):
-        self.scale = scale
-        self.degrees = set(degrees)
-
-    def add(self, d):
-        assert 1<= d <= 13
-        self.degrees.add(d)
-        return self
-
-    def no(self, d):
-        assert 1<= d <= 13
-        self.degrees.remove(d)
-        return self
-
-    def sus(self, d):
-        assert d in [2, 4]
-        return self.no(3).add(d)
-
-    def transpose(self, n):
-        self.scale.tonic += n
-        return self
-
-    def notes(self):
-        return [self.scale.note(d) for d in self.degrees]
-
-    def intervals(self):
-        return [self.scale.interval(d) for d in self.degrees]
-
-
+    def __str__(self):
+        return (
+            "                             \n"
+            "    Scale:       {} {}       \n"
+            "    ------                   \n"
+            "    Pitches:     {}          \n"
+            "    Intervals:   {}          \n"
+        ).format(
+            self.tonic,
+            self.mode,
+            [str(n) for n in self.pitch_set],
+            self.interval_vector
+        )
