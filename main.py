@@ -1,7 +1,8 @@
-from collections import Counter, MutableSet
-from itertools import combinations, starmap
+from collections import Counter, MutableSet, Set, namedtuple
+from itertools import combinations, starmap, islice, cycle
 
-from describe import describe_object, set_verbosity
+from lib import accumulate, rotate, degree_to_index
+from describe import describe_object
 
 
 class PC(object):
@@ -13,13 +14,30 @@ class PC(object):
         return self.p % 12
 
     def __sub__(self, other):
-        return IC(self, other)
+        if isinstance(other, IC):
+            return PC(int(self) - int(other))
+        if isinstance(other, PC):
+            return IC(self, other)
+        else:
+            raise TypeError(
+                "TypeError: unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other))
+            )
 
     def __add__(self, other):
-        try:
-            return Cluster(other) + self
-        except TypeError:
+        if isinstance(other, IC):
+            return PC(int(self) + int(other))
+        elif isinstance(other, PC):
             return Cluster([other, self])
+        else:
+            raise TypeError(
+                "TypeError: unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other))
+            )
+
+    def __iadd__(self, other):
+        return self + other
+
+    def __isub__(self, other):
+        return self - other
 
     def __cmp__(self, other):
         return cmp(int(self), int(other))
@@ -40,10 +58,34 @@ class IC(object):
         self.a = int(a)
         self.b = int(b)
 
+    @property
+    def upper(self):
+        return max(self.a, self.b)
+
+    @property
+    def lower(self):
+        return min(self.a, self.b)
+
     def __int__(self):
         ab = (self.a - self.b) % 12
         ba = (self.b - self.a) % 12
         return min(ab, ba)
+
+    def __sub__(self, other):
+        if isinstance(other, IC):
+            return IC(int(self) + int(other))
+        else:
+            raise TypeError(
+                "TypeError: unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other))
+            )
+
+    def __add__(self, other):
+        if isinstance(other, IC):
+            return IC(int(self) + int(other))
+        else:
+            raise TypeError(
+                "TypeError: unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other))
+            )
 
     def __cmp__(self, other):
         return cmp(int(self), int(other))
@@ -102,6 +144,70 @@ class Cluster(MutableSet):
         return "Cluster([{}])".format(
             ", ".join(repr(p) for p in self)
         )
+
+
+class HeptatonicScale(Set):
+
+    Definition = namedtuple(
+        "ScaleDefinition",
+        ['tonic', 'steps', 'mode']
+    )
+
+    def __init__(self, define):
+        assert sum(define.steps) == 12
+        assert len(define.steps) == 7
+        self.define = define
+
+    @property
+    def tonic(self):
+        return PC(self.define.tonic)
+
+    @property
+    def steps(self):
+        return map(IC, rotate(self.define.steps, self.define.mode))
+
+    def degree(self, d):
+        i = degree_to_index(d)
+        note = self.tonic
+        for step in xrange(i%7):
+            note += self.steps[step%7]
+        return note
+
+    def relative_mode(self, d):
+        new = self.define._replace(
+            tonic=self.degree(d),
+            mode=self.define.mode + d - 1
+        )
+        return HeptatonicScale(new)
+
+    def triad(self, d):
+        scale = self.relative_mode(d)
+        return Chord([
+            scale.degree(1),
+            scale.degree(3),
+            scale.degree(5)
+        ])
+
+    @property
+    def key(self):
+        return Cluster(self)
+
+    def __len__(self):
+        return 7
+
+    def __iter__(self):
+        return (self.degree(i) for i in range(1, 8))
+
+    def __contains__(self, o):
+        return o in key
+
+    
+class Chord(Cluster):
+
+    pass
+
+
+
 
 
 

@@ -127,5 +127,6 @@ def describe_object(obj):
         "PC" :      describe_pitch,
         "IC" :      describe_interval,
         "Cluster" : describe_cluster,
+        "Chord" :   describe_cluster,
     }[type(obj).__name__]
     return "\n" + descrition(obj) + "\n"
