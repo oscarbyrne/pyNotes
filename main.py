@@ -1,214 +1,181 @@
-from collections import Counter, MutableSet, Set, namedtuple
-from itertools import combinations, starmap, islice, cycle
+from collections import Iterable, Sequence, Set, Counter, MutableSet
+from sys import maxint
+from operator import methodcaller
+from itertools import combinations, starmap
 
-from lib import accumulate, rotate, degree_to_index
-from describe import describe_object
+
+def IntervalClass(a, b):
+    ab = (int(a) - int(b)) % 12
+    ba = (int(b) - int(a)) % 12
+    return min(ab, ba)
 
 
-class PC(object):
+class Pitch(object):
 
-    def __init__(self, p):
-        self.p = int(p)
+    def __init__(self, other):
+        if isinstance(other, Pitch):
+            self.p = other.p
+        else:
+            self.p = other
+
+    @property
+    def p(self):
+        return self._p
+
+    @p.setter
+    def p(self, value):
+        self._p = int(value)
+
+    def transposed(self, i):
+        return type(self)(self.p + i)
+
+    def inverted(self, plane=0):
+        raise NotImplementedError()
 
     def __int__(self):
-        return self.p % 12
-
-    def __sub__(self, other):
-        if isinstance(other, IC):
-            return PC(int(self) - int(other))
-        if isinstance(other, PC):
-            return IC(self, other)
-        else:
-            raise TypeError(
-                "TypeError: unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other))
-            )
-
-    def __add__(self, other):
-        if isinstance(other, IC):
-            return PC(int(self) + int(other))
-        elif isinstance(other, PC):
-            return Cluster([other, self])
-        else:
-            raise TypeError(
-                "TypeError: unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other))
-            )
-
-    def __iadd__(self, other):
-        return self + other
-
-    def __isub__(self, other):
-        return self - other
+        return self.p
 
     def __cmp__(self, other):
         return cmp(int(self), int(other))
 
-    def __hash__(self):
-        return hash(int(self))
-
-    def __str__(self):
-        return describe_object(self)
-
     def __repr__(self):
-        return "PC({})".format(int(self))
+        return "{}({})".format(
+            type(self).__name__,
+            self.p
+        )
 
 
-class IC(object):
-
-    def __init__(self, a, b=0):
-        self.a = int(a)
-        self.b = int(b)
+class PitchClass(Pitch):
 
     @property
-    def upper(self):
-        return max(self.a, self.b)
+    def p(self):
+        return self._p
 
-    @property
-    def lower(self):
-        return min(self.a, self.b)
-
-    def __int__(self):
-        ab = (self.a - self.b) % 12
-        ba = (self.b - self.a) % 12
-        return min(ab, ba)
-
-    def __sub__(self, other):
-        if isinstance(other, IC):
-            return IC(int(self) + int(other))
-        else:
-            raise TypeError(
-                "TypeError: unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other))
-            )
-
-    def __add__(self, other):
-        if isinstance(other, IC):
-            return IC(int(self) + int(other))
-        else:
-            raise TypeError(
-                "TypeError: unsupported operand type(s) for +: '{}' and '{}'".format(type(self), type(other))
-            )
-
-    def __cmp__(self, other):
-        return cmp(int(self), int(other))
-
-    def __hash__(self):
-        return hash(int(self))
-
-    def __str__(self):
-        return describe_object(self)
-
-    def __repr__(self):
-        return "IC({})".format(int(self))
+    @p.setter
+    def p(self, value):
+        self._p = int(value) % 12
 
 
-class Cluster(MutableSet):
+class PitchCollection(Iterable):
 
-    def __init__(self, ps):
-        self.pitch_set = set()
-        for p in ps:
-            self.add(p)
+    def to_simple_form(self):
+        return type(self.pitches)(map(int, self.pitches))
+
+    def __init__(self, pitches):
+        self.pitches = map(Pitch, pitches)
+
+    def __iter__(self):
+        return iter(self.pitches)
+
+    def transposed(self, i):
+        return type(self)(
+            pitch.transposed(i) for pitch in self
+        )
+
+    def inverted(self, plane=0):
+        return type(self)(
+            pitch.inverted(plane) for pitch in self
+        )
 
     @property
     def interval_vector(self):
         pairs = combinations(self, 2)
-        return Counter(starmap(IC, pairs))
-        
-    def add(self, p):
-        p = PC(p)
-        self.pitch_set.add(p)
-        return self
+        return Counter(starmap(IntervalClass, pairs))
 
-    def discard(self, p):
-        p = PC(p)
-        self.pitch_set.discard(p)
-        return self
-
-    def __contains__(self, p):
-        p = PC(p)
-        return p in self.pitch_set
-
-    def __len__(self):
-        return len(self.pitch_set)
-
-    def __iter__(self):
-        notes = list(self.pitch_set)
-        return iter(sorted(notes))
-
-    def __add__(self, p):
-        new = Cluster(self)
-        return new.add(p)
-
-    def __str__(self):
-        return describe_object(self)
+    @property
+    def prime_form(self):
+        """
+        From Rahn algorithm
+        See: http://composertools.com/Theory/PCSets/PCSets3.htm
+        """
+        pcs = OrderedPitchSet(self.pitches).sorted()        # sort pitches
+        rot = [pcs.rotated(i) for i in xrange(len(self))]   # all possible rotations
+        seq = [-1] + range(1, len(self) - 1)                # most emphasis on distance from first to last
+        for i in reversed(seq):                             # exploiting python's stable sorting
+            rot = sorted(
+                rot,
+                key=methodcaller('interval', 0, i)
+            )
+        norm = rot[0]
+        return norm.transposed(-int(norm[0]))
 
     def __repr__(self):
-        return "Cluster([{}])".format(
-            ", ".join(repr(p) for p in self)
+        return "{}([{}])".format(
+            type(self).__name__,
+            ",".join(str(pitch) for pitch in self)
         )
 
 
-class HeptatonicScale(Set):
-
-    Definition = namedtuple(
-        "ScaleDefinition",
-        ['tonic', 'steps', 'mode']
-    )
-
-    def __init__(self, define):
-        assert sum(define.steps) == 12
-        assert len(define.steps) == 7
-        self.define = define
+class OrderedPitchSet(PitchCollection, Sequence):
 
     @property
-    def tonic(self):
-        return PC(self.define.tonic)
+    def pitches(self):
+        return self._pitches
 
-    @property
-    def steps(self):
-        return map(IC, rotate(self.define.steps, self.define.mode))
+    @pitches.setter
+    def pitches(self, value):
+        self._pitches = list(value)
 
-    def degree(self, d):
-        i = degree_to_index(d)
-        note = self.tonic
-        for step in xrange(i%7):
-            note += self.steps[step%7]
-        return note
+    def __getitem__(self, given):
+        return self.pitches[given % len(self)]
 
-    def relative_mode(self, d):
-        new = self.define._replace(
-            tonic=self.degree(d),
-            mode=self.define.mode + d - 1
+    def __getslice__(self, start, stop):
+        if stop == maxint:
+            stop = len(self)
+        return type(self)(
+            self[i] for i in range(start, stop)
         )
-        return HeptatonicScale(new)
 
-    def triad(self, d):
-        scale = self.relative_mode(d)
-        return Chord([
-            scale.degree(1),
-            scale.degree(3),
-            scale.degree(5)
-        ])
-
-    @property
-    def key(self):
-        return Cluster(self)
+    def __add__(self, other):
+        return type(self)(
+            self.pitches + other.pitches
+        )
 
     def __len__(self):
-        return 7
+        return len(self.pitches)
 
-    def __iter__(self):
-        return (self.degree(i) for i in range(1, 8))
+    def sorted(self, key=None, reverse=False):
+        return type(self)(
+            sorted(self.pitches, key=key, reverse=reverse)
+        )
 
-    def __contains__(self, o):
-        return o in key
+    def rotated(self, n):
+        """
+        Equivalent to chord inversion
+        """
+        assert len(self) >= n
+        return type(self)(
+            self[n:] + self[:n].transposed(12)
+        )
 
-    
-class Chord(Cluster):
+    def interval(self, i, j):
+        return int(self[j]) - int(self[i])
+
+
+class UnorderedPitchSet(PitchCollection, Set):
+
+    @property
+    def pitches(self):
+        return self._pitches
+
+    @pitches.setter
+    def pitches(self, value):
+        self._pitches = set(value)
+
+    def __contains__(self, pitch):
+        return pitch in self.pitches
+
+    def __len__(self):
+        return len(self.pitches)
+
+
+
+
+class DiatonicScale(OrderedPitchSet):
 
     pass
 
 
+class Chord(UnorderedPitchSet, MutableSet):
 
-
-
-
-
+    pass
