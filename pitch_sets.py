@@ -47,7 +47,7 @@ class PitchCollection(Iterable):
                 key=methodcaller('interval', 0, i)
             )
         norm = rot[0]
-        return norm.transposed(-int(norm[0]))
+        return norm.zeroed()
 
     def __repr__(self):
         return "{}([{}])".format(
@@ -97,6 +97,9 @@ class OrderedPitchSet(PitchCollection, Sequence):
         return type(self)(
             self[n:] + self[:n].transposed(12)
         )
+
+    def zeroed(self):
+        return self.transposed(-int(self[0]))
 
     def interval(self, i, j):
         return int(self[j]) - int(self[i])
