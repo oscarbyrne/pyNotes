@@ -1,4 +1,4 @@
-from collections import Set, Counter
+from collections import Set, Counter, Sequence
 from copy import copy
 from itertools import combinations, starmap
 
@@ -45,7 +45,33 @@ def get_prime_form(pitches):
     return prime_form, rotation, transposition
 
 
+class PitchClassSetContainer(Sequence):
+
+    def __init__(self, pc_sets):
+        self.pc_sets = pc_sets
+
+    def __getitem__(self, i):
+        return self.pc_sets[i]
+
+    def __len__(self):
+        return len(self.pc_sets)
+
+    def __repr__(self):
+        return repr(self.pc_sets)
+
+    def __str__(self):
+        s = "\n"
+        for i, p in enumerate(self.pc_sets):
+            s += "{} {}\n".format(
+                "[{}]".format(i).ljust(6),
+                str(p)
+            )
+        return s
+        
+
+
 class PitchClassSet(Set):
+    # TO DO: This should be a sequence!
 
     @classmethod
     def from_pitches(cls, pitches):
@@ -84,13 +110,11 @@ class PitchClassSet(Set):
     def supersets(self):
         supersets = []
         for prime_form in [pf for pf in prime_forms if len(pf) > len(self)]:
-            pcs = PitchClassSet(prime_form, 0, 0)
-            for n in range(len(pcs)):
-                c = pcs.rotated(n)
-                c = c.transposed(-c.pitch_classes[0])
-                if c.pitch_classes[:len(self)] == self.pitch_classes:
+            for i in range(12):
+                c = PitchClassSet(prime_form, 0, i)
+                if set(self.pitch_classes).issubset(c.pitch_classes):
                     supersets.append(c)
-        return supersets
+        return PitchClassSetContainer(supersets)
 
     @property
     def subsets(self):
@@ -98,7 +122,7 @@ class PitchClassSet(Set):
         for r in range(3, len(self)):
             c = combinations(self, r)
             subsets.extend(map(PitchClassSet.from_pitches, c))
-        return subsets
+        return PitchClassSetContainer(subsets)
 
     @property
     def similar_sets(self):
@@ -114,7 +138,7 @@ class PitchClassSet(Set):
                 p[i] = c[j]
                 s[j] = PitchClassSet.from_pitches(p)
             similar.extend(s)
-        return similar
+        return PitchClassSetContainer(similar)
 
     @property
     def name(self):
@@ -124,7 +148,7 @@ class PitchClassSet(Set):
             return "Unnamed set"
 
     def transposed(self, i):
-        return type(self)(self.prime_form, self.rotation, self.transposition - i)
+        return type(self)(self.prime_form, self.rotation, self.transposition + i)
 
     def rotated(self, n):
         return type(self)(self.prime_form, self.rotation - n, self.transposition)
@@ -142,8 +166,8 @@ class PitchClassSet(Set):
         intervals = ["0"]*6
         for k, v in self.interval_vector.items():
             intervals[k-1] = duodecimal[v]
-        return "{} <{}> :    {}".format(
-            pitches.ljust(11),
+        return "{} <{}> : {}".format(
+            pitches.ljust(12),
             "".join(intervals),
             self.name
         )
