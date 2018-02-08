@@ -119,7 +119,7 @@ class PitchClassSet(Set):
     @property
     def subsets(self):
         subsets = []
-        for r in range(3, len(self)):
+        for r in range(1, len(self)):
             c = combinations(self, r)
             subsets.extend(map(PitchClassSet.from_pitches, c))
         return PitchClassSetContainer(subsets)
