@@ -36,8 +36,9 @@ class Chord(PitchClassSet):
     @property
     def pitches(self):
         pitches = []
+        scale = self.scale.parallel_mode(self.degree)
         for degree, octaves in self.voicing.items():
-            pitch_class = self.scale[degree]
+            pitch_class = scale[degree]
             pitches.extend(pitch_class + (12*octave) for octave in octaves)
         return pitches
 
