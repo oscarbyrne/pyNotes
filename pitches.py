@@ -114,7 +114,7 @@ class PitchClassSet(Set):
                 c = PitchClassSet(prime_form, 0, i)
                 if set(self.pitch_classes).issubset(c.pitch_classes):
                     supersets.append(c)
-        return PitchClassSetContainer(supersets)
+        return PitchClassSetContainer(sorted(supersets, key=len))
 
     @property
     def subsets(self):
