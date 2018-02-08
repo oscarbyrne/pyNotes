@@ -10,11 +10,11 @@ By defining groups of notes by their 'prime form' (see: http://composertools.com
     >>> print pcs.similar_sets
     >>> print pcs.supersets
     >>> print pcs.subsets
-    >>> jazz_minor = pcs.supersets[14]
+    >>> jazz_minor = pcs.supersets[133]
     >>> jazz_minor = Scale.from_pitches(jazz_minor)
     >>> jazz_minor.relative_mode(2)
     >>> chord = jazz_minor.triad(1)
     >>> chord.add(7).no(5)
     >>> chord.name
-    'Incomplete Minor-seventh Chord'
+    'Incomplete Minor-seventh Chord.1'
   
