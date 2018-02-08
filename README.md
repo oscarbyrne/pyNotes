@@ -9,6 +9,7 @@ By defining groups of notes by their 'prime form' (see: http://composertools.com
     'Major Chord'
     >>> print pcs.similar_sets
     >>> print pcs.supersets
+    >>> print pcs.subsets
     >>> jazz_minor = pcs.supersets[14]
     >>> jazz_minor = Scale.from_pitches(jazz_minor)
     >>> jazz_minor.relative_mode(2)
